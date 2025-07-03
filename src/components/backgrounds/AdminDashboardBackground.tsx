@@ -1,85 +1,53 @@
 
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Suspense, useRef } from 'react';
+import { Points, PointMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 
-function DataCubes() {
-  const group = useRef<THREE.Group>(null);
+function DataSphere() {
+  const ref = useRef<THREE.Points>(null);
   
+  const sphere = new Float32Array(1500 * 3);
+  for (let i = 0; i < 1500; i++) {
+    const i3 = i * 3;
+    const radius = Math.random() * 8 + 3;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(Math.random() * 2 - 1);
+    
+    sphere[i3] = radius * Math.sin(phi) * Math.cos(theta);
+    sphere[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+    sphere[i3 + 2] = radius * Math.cos(phi);
+  }
+
   useFrame((state) => {
-    if (group.current) {
-      group.current.rotation.y = state.clock.elapsedTime * 0.1;
+    if (ref.current) {
+      ref.current.rotation.x = state.clock.elapsedTime * 0.05;
+      ref.current.rotation.y = state.clock.elapsedTime * 0.1;
     }
   });
 
-  const cubes = Array.from({ length: 20 }, (_, i) => (
-    <mesh
-      key={i}
-      position={[
-        (Math.random() - 0.5) * 20,
-        (Math.random() - 0.5) * 20,
-        (Math.random() - 0.5) * 20
-      ]}
-    >
-      <boxGeometry args={[0.5, 0.5, 0.5]} />
-      <meshStandardMaterial
-        color="#7c3aed"
+  return (
+    <Points ref={ref} positions={sphere} stride={3} frustumCulled={false}>
+      <PointMaterial
         transparent
-        opacity={0.7}
+        color="#7c3aed"
+        size={0.03}
+        sizeAttenuation={true}
+        depthWrite={false}
       />
-    </mesh>
-  ));
-
-  return <group ref={group}>{cubes}</group>;
+    </Points>
+  );
 }
 
-function GridLines() {
-  const lines = [];
-  
-  for (let i = -10; i <= 10; i += 2) {
-    // Vertical lines
-    lines.push(
-      <line key={`v${i}`}>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            count={2}
-            array={new Float32Array([i, -10, 0, i, 10, 0])}
-            itemSize={3}
-          />
-        </bufferGeometry>
-        <lineBasicMaterial color="#a855f7" transparent opacity={0.3} />
-      </line>
-    );
-    
-    // Horizontal lines
-    lines.push(
-      <line key={`h${i}`}>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            count={2}
-            array={new Float32Array([-10, i, 0, 10, i, 0])}
-            itemSize={3}
-          />
-        </bufferGeometry>
-        <lineBasicMaterial color="#a855f7" transparent opacity={0.3} />
-      </line>
-    );
-  }
-  
-  return <>{lines}</>;
-}
-
-function FloatingCharts() {
-  const charts = Array.from({ length: 4 }, (_, i) => {
+function FloatingCubes() {
+  const cubes = Array.from({ length: 12 }, (_, i) => {
     const ref = useRef<THREE.Mesh>(null);
     
     useFrame((state) => {
       if (ref.current) {
-        ref.current.rotation.x = state.clock.elapsedTime * 0.3 + i;
-        ref.current.rotation.z = state.clock.elapsedTime * 0.2;
-        ref.current.position.y = Math.sin(state.clock.elapsedTime + i * 2) * 2;
+        ref.current.rotation.x = state.clock.elapsedTime * (0.2 + i * 0.05);
+        ref.current.rotation.y = state.clock.elapsedTime * 0.15;
+        ref.current.position.y = Math.sin(state.clock.elapsedTime + i) * 1;
       }
     });
 
@@ -89,34 +57,34 @@ function FloatingCharts() {
         ref={ref}
         position={[
           (Math.random() - 0.5) * 15,
-          0,
+          (Math.random() - 0.5) * 10,
           (Math.random() - 0.5) * 15
         ]}
       >
-        <cylinderGeometry args={[1, 1, 0.1, 8]} />
+        <boxGeometry args={[0.8, 0.8, 0.8]} />
         <meshStandardMaterial
-          color={new THREE.Color().setHSL(0.8 + i * 0.05, 0.8, 0.6)}
+          color="#a855f7"
           transparent
-          opacity={0.8}
+          opacity={0.7}
+          wireframe
         />
       </mesh>
     );
   });
 
-  return <>{charts}</>;
+  return <>{cubes}</>;
 }
 
 const AdminDashboardBackground = () => {
   return (
     <div className="fixed inset-0 z-0">
-      <Canvas camera={{ position: [0, 0, 15], fov: 75 }}>
+      <Canvas camera={{ position: [0, 0, 12], fov: 75 }}>
         <Suspense fallback={null}>
-          <ambientLight intensity={0.3} />
+          <ambientLight intensity={0.4} />
           <pointLight position={[10, 10, 10]} intensity={1} color="#7c3aed" />
-          <pointLight position={[-10, -10, -10]} intensity={0.5} color="#ec4899" />
-          <GridLines />
-          <DataCubes />
-          <FloatingCharts />
+          <pointLight position={[-10, -10, -10]} intensity={0.6} color="#ec4899" />
+          <DataSphere />
+          <FloatingCubes />
         </Suspense>
       </Canvas>
     </div>

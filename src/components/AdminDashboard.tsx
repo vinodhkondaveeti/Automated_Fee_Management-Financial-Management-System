@@ -9,6 +9,8 @@ import FeeManagement from "./admin/FeeManagement";
 import AddExtraFee from "./admin/AddExtraFee";
 import AllTransactions from "./admin/AllTransactions";
 import RemoveFeeStudent from "./admin/RemoveFeeStudent";
+import BulkStudentImport from "./admin/BulkStudentImport";
+import FeeDeadlineManager from "./admin/FeeDeadlineManager";
 
 interface AdminDashboardProps {
   user: any;
@@ -25,7 +27,9 @@ const AdminDashboard = ({ user, onLogout }: AdminDashboardProps) => {
   const tabs = [
     { id: "student-list", label: "Student List", icon: "👥" },
     { id: "add-student", label: "Add Student", icon: "➕" },
+    { id: "bulk-import", label: "Bulk Import", icon: "📊" },
     { id: "fee-management", label: "Fee Management", icon: "💰" },
+    { id: "deadline-manager", label: "Fee Deadlines", icon: "⏰" },
     { id: "add-extra-fee", label: "Extra Fee", icon: "📋" },
     { id: "transactions", label: "Transactions", icon: "📊" },
     { id: "remove-fee", label: "Remove Fee", icon: "🗑️" }
@@ -37,8 +41,12 @@ const AdminDashboard = ({ user, onLogout }: AdminDashboardProps) => {
         return <StudentList />;
       case "add-student":
         return <AddStudent />;
+      case "bulk-import":
+        return <BulkStudentImport />;
       case "fee-management":
         return <FeeManagement />;
+      case "deadline-manager":
+        return <FeeDeadlineManager />;
       case "add-extra-fee":
         return <AddExtraFee />;
       case "transactions":
@@ -57,7 +65,7 @@ const AdminDashboard = ({ user, onLogout }: AdminDashboardProps) => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-6xl mx-auto"
+          className="max-w-7xl mx-auto"
         >
           {/* Header */}
           <div className="bg-black/20 backdrop-blur-lg border border-white/20 rounded-3xl p-6 mb-6 shadow-2xl">
@@ -98,7 +106,7 @@ const AdminDashboard = ({ user, onLogout }: AdminDashboardProps) => {
 
           {/* Navigation Tabs */}
           <div className="bg-black/20 backdrop-blur-lg border border-white/20 rounded-3xl p-6 mb-6 shadow-2xl">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
               {tabs.map((tab) => (
                 <motion.button
                   key={tab.id}

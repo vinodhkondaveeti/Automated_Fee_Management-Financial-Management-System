@@ -20,11 +20,28 @@ const AddStudent = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const validateUniquePin = (pin: string): boolean => {
+    return !students.some(s => s.pin === pin);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validate Student ID uniqueness
     if (students.some(s => s.id === formData.id)) {
       toast.error("Student ID already exists");
+      return;
+    }
+
+    // Validate Pin uniqueness
+    if (!validateUniquePin(formData.pin)) {
+      toast.error("Pin number already exists. Please use a unique pin number.");
+      return;
+    }
+
+    // Validate mobile number
+    if (formData.mobile.length !== 10 || !/^\d+$/.test(formData.mobile)) {
+      toast.error("Mobile number must be exactly 10 digits");
       return;
     }
 
@@ -42,7 +59,7 @@ const AddStudent = () => {
 
     const newStudent = {
       ...formData,
-      photoColor: "#2980b9",
+      photoColor: `#${Math.floor(Math.random()*16777215).toString(16)}`,
       feesByYear,
       duesByYear,
       fines: [],
@@ -114,7 +131,7 @@ const AddStudent = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-gray-300 mb-2">Pin No:</label>
+            <label className="block text-gray-300 mb-2">Pin No (Unique):</label>
             <input
               type="text"
               name="pin"
@@ -123,6 +140,9 @@ const AddStudent = () => {
               required
               className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
+            {formData.pin && !validateUniquePin(formData.pin) && (
+              <p className="text-red-400 text-sm mt-1">This pin number already exists</p>
+            )}
           </div>
           
           <div>
@@ -152,13 +172,15 @@ const AddStudent = () => {
           </div>
           
           <div>
-            <label className="block text-gray-300 mb-2">Mobile:</label>
+            <label className="block text-gray-300 mb-2">Mobile (10 digits):</label>
             <input
               type="text"
               name="mobile"
               value={formData.mobile}
               onChange={handleInputChange}
               required
+              pattern="[0-9]{10}"
+              maxLength={10}
               className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>

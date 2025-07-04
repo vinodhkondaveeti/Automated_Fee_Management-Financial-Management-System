@@ -2,104 +2,97 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Clock, Send, Users } from "lucide-react";
-import { students, fees } from "../../data/mockData";
-import { smsService } from "../../services/smsService";
+import { useStudents } from "../../hooks/useStudents";
+import { useFees } from "../../hooks/useFees";
 import { toast } from "sonner";
-
-interface FeeDeadline {
-  feeType: string;
-  branch: string;
-  deadline: Date;
-  notificationTime: Date;
-}
+import { supabase } from "@/integrations/supabase/client";
 
 const FeeDeadlineManager = () => {
-  const [deadlines, setDeadlines] = useState<FeeDeadline[]>([]);
+  const [deadlines, setDeadlines] = useState<any[]>([]);
   const [selectedFee, setSelectedFee] = useState("");
   const [selectedBranch, setSelectedBranch] = useState("");
   const [deadlineDate, setDeadlineDate] = useState("");
-  const [notificationHours, setNotificationHours] = useState(24);
+  const [loading, setLoading] = useState(false);
 
+  const { students } = useStudents();
+  const { fees } = useFees();
   const branches = [...new Set(students.map(s => s.branch))];
 
   useEffect(() => {
-    // Check deadlines every minute
-    const interval = setInterval(checkDeadlines, 60000);
-    return () => clearInterval(interval);
-  }, [deadlines]);
+    fetchDeadlines();
+  }, []);
 
-  const checkDeadlines = () => {
-    const now = new Date();
-    
-    deadlines.forEach(deadline => {
-      if (now >= deadline.notificationTime && now < deadline.deadline) {
-        const studentsInBranch = students.filter(s => s.branch === deadline.branch);
-        
-        studentsInBranch.forEach(student => {
-          const message = `Dear ${student.name}, you have less time to pay the ${deadline.feeType} fee. Make sure to pay the fee as soon as possible. Deadline: ${deadline.deadline.toLocaleDateString()}`;
-          
-          smsService.sendSMS(student.mobile, message);
-        });
-      }
-    });
+  const fetchDeadlines = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('fee_deadlines')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setDeadlines(data || []);
+    } catch (error) {
+      console.error('Error fetching deadlines:', error);
+    }
   };
 
-  const handleSetDeadline = () => {
+  const handleSetDeadline = async () => {
     if (!selectedFee || !selectedBranch || !deadlineDate) {
       toast.error("Please fill all fields");
       return;
     }
 
-    const deadline = new Date(deadlineDate);
-    const notificationTime = new Date(deadline.getTime() - (notificationHours * 60 * 60 * 1000));
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('fee_deadlines')
+        .insert({
+          branch: selectedBranch,
+          fee_type: selectedFee,
+          deadline: deadlineDate
+        });
 
-    const newDeadline: FeeDeadline = {
-      feeType: selectedFee,
-      branch: selectedBranch,
-      deadline,
-      notificationTime
-    };
+      if (error) throw error;
 
-    setDeadlines([...deadlines, newDeadline]);
-
-    // Schedule notifications for students in this branch
-    const studentsInBranch = students.filter(s => s.branch === selectedBranch);
-    studentsInBranch.forEach(student => {
-      const message = `Dear ${student.name}, you have less time to pay the ${selectedFee} fee. Make sure to pay the fee as soon as possible. Deadline: ${deadline.toLocaleDateString()}`;
+      toast.success(`Deadline set for ${selectedFee} - ${selectedBranch}`);
       
-      smsService.scheduleNotification(
-        student.id,
-        student.mobile,
-        message,
-        notificationTime
-      );
-    });
-
-    toast.success(`Deadline set for ${selectedFee} - ${selectedBranch}`);
-    
-    // Reset form
-    setSelectedFee("");
-    setSelectedBranch("");
-    setDeadlineDate("");
-    setNotificationHours(24);
+      // Reset form
+      setSelectedFee("");
+      setSelectedBranch("");
+      setDeadlineDate("");
+      
+      // Refresh deadlines
+      fetchDeadlines();
+    } catch (error) {
+      console.error('Error setting deadline:', error);
+      toast.error("Failed to set deadline. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSendImmediateNotification = (deadline: FeeDeadline) => {
+  const handleSendImmediateNotification = (deadline: any) => {
     const studentsInBranch = students.filter(s => s.branch === deadline.branch);
     
-    studentsInBranch.forEach(student => {
-      const message = `Dear ${student.name}, you have less time to pay the ${deadline.feeType} fee. Make sure to pay the fee as soon as possible. Deadline: ${deadline.deadline.toLocaleDateString()}`;
-      
-      smsService.sendSMS(student.mobile, message);
-    });
-
-    toast.success(`Notifications sent to ${studentsInBranch.length} students in ${deadline.branch}`);
+    // In a real implementation, this would send actual SMS/email notifications
+    toast.success(`Notifications would be sent to ${studentsInBranch.length} students in ${deadline.branch}`);
   };
 
-  const removeDeadline = (index: number) => {
-    const updatedDeadlines = deadlines.filter((_, i) => i !== index);
-    setDeadlines(updatedDeadlines);
-    toast.success("Deadline removed");
+  const removeDeadline = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('fee_deadlines')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast.success("Deadline removed");
+      fetchDeadlines();
+    } catch (error) {
+      console.error('Error removing deadline:', error);
+      toast.error("Failed to remove deadline");
+    }
   };
 
   return (
@@ -123,12 +116,13 @@ const FeeDeadlineManager = () => {
               <select
                 value={selectedFee}
                 onChange={(e) => setSelectedFee(e.target.value)}
-                className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                disabled={loading}
+                className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
               >
                 <option value="">Select Fee Type</option>
                 {fees.map(fee => (
                   <option key={fee.name} value={fee.name} className="bg-gray-800">
-                    {fee.desc}
+                    {fee.name}
                   </option>
                 ))}
               </select>
@@ -139,7 +133,8 @@ const FeeDeadlineManager = () => {
               <select
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
-                className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                disabled={loading}
+                className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
               >
                 <option value="">Select Branch</option>
                 {branches.map(branch => (
@@ -156,29 +151,19 @@ const FeeDeadlineManager = () => {
                 type="datetime-local"
                 value={deadlineDate}
                 onChange={(e) => setDeadlineDate(e.target.value)}
-                className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-gray-300 mb-2">Notify Before (hours):</label>
-              <input
-                type="number"
-                min="1"
-                max="168"
-                value={notificationHours}
-                onChange={(e) => setNotificationHours(parseInt(e.target.value))}
-                className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                disabled={loading}
+                className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
               />
             </div>
 
             <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: loading ? 1 : 1.02 }}
+              whileTap={{ scale: loading ? 1 : 0.98 }}
               onClick={handleSetDeadline}
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-6 rounded-xl font-semibold transition-all"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-6 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Set Deadline & Schedule Notifications
+              {loading ? "Setting Deadline..." : "Set Deadline"}
             </motion.button>
           </div>
         </motion.div>
@@ -199,28 +184,25 @@ const FeeDeadlineManager = () => {
             ) : (
               deadlines.map((deadline, index) => (
                 <motion.div
-                  key={index}
+                  key={deadline.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-white/5 rounded-lg p-4 border border-white/10"
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div>
-                      <p className="font-semibold">{deadline.feeType}</p>
+                      <p className="font-semibold">{deadline.fee_type}</p>
                       <p className="text-sm text-gray-400">Branch: {deadline.branch}</p>
                     </div>
                     <button
-                      onClick={() => removeDeadline(index)}
+                      onClick={() => removeDeadline(deadline.id)}
                       className="text-red-400 hover:text-red-300 text-sm"
                     >
                       Remove
                     </button>
                   </div>
                   <p className="text-sm text-gray-300">
-                    Deadline: {deadline.deadline.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-300">
-                    Notify at: {deadline.notificationTime.toLocaleString()}
+                    Deadline: {new Date(deadline.deadline).toLocaleString()}
                   </p>
                   <motion.button
                     whileHover={{ scale: 1.02 }}
@@ -229,7 +211,7 @@ const FeeDeadlineManager = () => {
                     className="mt-2 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
                   >
                     <Send className="w-3 h-3" />
-                    Send Now
+                    Send Notification
                   </motion.button>
                 </motion.div>
               ))

@@ -1,57 +1,82 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { students, years } from "../../data/mockData";
+import { useStudents } from "../../hooks/useStudents";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const AddExtraFee = () => {
   const [formData, setFormData] = useState({
     studentId: "",
-    year: years[0],
+    year: "2024-25",
     name: "",
     desc: "",
     amount: ""
   });
+  const [loading, setLoading] = useState(false);
+
+  const { students } = useStudents();
+  const years = ["2024-25", "2025-26", "2026-27", "2027-28"];
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     
-    const student = students.find(s => s.id === formData.studentId);
-    if (!student) {
-      toast.error("Student not found");
-      return;
+    try {
+      const student = students.find(s => s.id === formData.studentId);
+      if (!student) {
+        toast.error("Student not found");
+        return;
+      }
+
+      const amount = parseInt(formData.amount);
+      
+      // Add to student_fees table
+      const { error: feeError } = await supabase
+        .from('student_fees')
+        .insert({
+          student_id: formData.studentId,
+          fee_name: formData.name,
+          year: formData.year,
+          total_amount: amount,
+          due_amount: amount,
+          paid_amount: 0
+        });
+
+      if (feeError) throw feeError;
+
+      // Add transaction record for the extra fee
+      const { error: transactionError } = await supabase
+        .from('transactions')
+        .insert({
+          student_id: formData.studentId,
+          description: `Extra fee added: ${formData.desc} (${formData.year})`,
+          amount: amount,
+          transaction_type: 'fee_added'
+        });
+
+      if (transactionError) throw transactionError;
+
+      toast.success("Extra fee added successfully!");
+      
+      setFormData({
+        studentId: "",
+        year: "2024-25",
+        name: "",
+        desc: "",
+        amount: ""
+      });
+    } catch (error) {
+      console.error('Error adding extra fee:', error);
+      toast.error("Failed to add extra fee. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    const amount = parseInt(formData.amount);
-    
-    if (!student.feesByYear[formData.year]) student.feesByYear[formData.year] = {};
-    if (!student.duesByYear[formData.year]) student.duesByYear[formData.year] = {};
-    
-    student.feesByYear[formData.year][formData.name] = amount;
-    student.duesByYear[formData.year][formData.name] = (student.duesByYear[formData.year][formData.name] || 0) + amount;
-    
-    if (!student.extraFees) student.extraFees = [];
-    student.extraFees.push({
-      year: formData.year,
-      name: formData.name,
-      desc: formData.desc,
-      amount: amount
-    });
-
-    toast.success("Extra fee added successfully!");
-    
-    setFormData({
-      studentId: "",
-      year: years[0],
-      name: "",
-      desc: "",
-      amount: ""
-    });
   };
 
   return (
@@ -72,12 +97,13 @@ const AddExtraFee = () => {
               value={formData.studentId}
               onChange={handleInputChange}
               required
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
             >
               <option value="" className="bg-gray-800">Select Student</option>
               {students.map(student => (
                 <option key={student.id} value={student.id} className="bg-gray-800">
-                  {student.name} ({student.id})
+                  {student.name} ({student.student_id})
                 </option>
               ))}
             </select>
@@ -89,7 +115,8 @@ const AddExtraFee = () => {
               name="year"
               value={formData.year}
               onChange={handleInputChange}
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
             >
               {years.map(year => (
                 <option key={year} value={year} className="bg-gray-800">{year}</option>
@@ -106,7 +133,8 @@ const AddExtraFee = () => {
             value={formData.name}
             onChange={handleInputChange}
             required
-            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            disabled={loading}
+            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
           />
         </div>
 
@@ -118,7 +146,8 @@ const AddExtraFee = () => {
             value={formData.desc}
             onChange={handleInputChange}
             required
-            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            disabled={loading}
+            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
           />
         </div>
 
@@ -131,17 +160,19 @@ const AddExtraFee = () => {
             onChange={handleInputChange}
             min="1"
             required
-            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            disabled={loading}
+            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
           />
         </div>
 
         <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: loading ? 1 : 1.02 }}
+          whileTap={{ scale: loading ? 1 : 0.98 }}
           type="submit"
-          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-8 rounded-xl font-semibold transition-all shadow-lg"
+          disabled={loading}
+          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-8 rounded-xl font-semibold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Add Extra Fee
+          {loading ? "Adding Extra Fee..." : "Add Extra Fee"}
         </motion.button>
       </motion.form>
     </div>

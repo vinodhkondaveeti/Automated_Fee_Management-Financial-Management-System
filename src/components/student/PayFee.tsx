@@ -1,8 +1,9 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { fees, years, deadlines } from "../../data/mockData";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import jsPDF from "jspdf";
 
 interface PayFeeProps {
   student: any;
@@ -10,50 +11,89 @@ interface PayFeeProps {
 }
 
 const PayFee = ({ student, onPayment }: PayFeeProps) => {
-  const [selectedYear, setSelectedYear] = useState(years[0]);
+  const [selectedYear, setSelectedYear] = useState("2024-25");
   const [selectedFeeType, setSelectedFeeType] = useState("");
   const [amount, setAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Credit Card");
-  const [lastReceipt, setLastReceipt] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
   
+  const years = ["2024-25", "2025-26", "2026-27", "2027-28"];
   const paymentMethods = [
     "Credit Card", "Debit Card", "UPI Number", "PhonePe", 
     "GooglePay", "Paytm", "Amazon Pay", "PayPal", "Super Money"
   ];
 
   const getAvailableFees = () => {
-    const available = [];
-    for (let fee of fees) {
-      if (student.feesByYear[selectedYear][fee.name] !== undefined) {
-        available.push({ name: fee.name, desc: fee.desc });
-      }
+    if (!student.feesByYear || !student.feesByYear[selectedYear]) {
+      return [];
     }
-    if (student.extraFees) {
-      for (let ef of student.extraFees.filter((e: any) => e.year === selectedYear)) {
-        available.push({ name: ef.name, desc: ef.name + " (Extra)" });
-      }
-    }
-    return available;
+    
+    return Object.entries(student.feesByYear[selectedYear]).map(([name, amount]) => ({
+      name,
+      desc: name,
+      amount: amount as number
+    }));
   };
 
   const getDueAmount = () => {
-    if (!selectedFeeType) return 0;
+    if (!selectedFeeType || !student.duesByYear || !student.duesByYear[selectedYear]) {
+      return 0;
+    }
     return student.duesByYear[selectedYear][selectedFeeType] || 0;
   };
 
-  const getButtonColor = () => {
-    const deadline = deadlines[selectedFeeType as keyof typeof deadlines];
-    if (!deadline) return "bg-blue-500";
-    
-    const now = new Date();
-    const diff = (deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-    
-    if (diff > 7) return "bg-green-500 hover:bg-green-600";
-    else if (diff > 0) return "bg-orange-500 hover:bg-orange-600";
-    else return "bg-red-500 hover:bg-red-600";
+  const updateStudentFeeInDatabase = async (paidAmount: number) => {
+    try {
+      // Find the student in database using the legacy ID format
+      const { data: dbStudent } = await supabase
+        .from('students')
+        .select('id')
+        .eq('student_id', student.id)
+        .single();
+
+      if (!dbStudent) {
+        throw new Error('Student not found in database');
+      }
+
+      // Update the student_fees table
+      const { error: updateError } = await supabase
+        .from('student_fees')
+        .update({
+          due_amount: getDueAmount() - paidAmount,
+          paid_amount: supabase.rpc('student_fees_paid_amount', { 
+            student_uuid: dbStudent.id,
+            fee_name_param: selectedFeeType,
+            year_param: selectedYear
+          }) + paidAmount,
+          updated_at: new Date().toISOString()
+        })
+        .eq('student_id', dbStudent.id)
+        .eq('fee_name', selectedFeeType)
+        .eq('year', selectedYear);
+
+      if (updateError) throw updateError;
+
+      // Add transaction record
+      const txnId = "TXN" + Date.now();
+      const { error: transactionError } = await supabase
+        .from('transactions')
+        .insert({
+          student_id: dbStudent.id,
+          description: `Paid ₹${paidAmount} for ${selectedFeeType} (${selectedYear}) via ${paymentMethod} [${txnId}]`,
+          amount: paidAmount,
+          transaction_type: 'payment'
+        });
+
+      if (transactionError) throw transactionError;
+
+      return txnId;
+    } catch (error) {
+      console.error('Database update error:', error);
+      throw error;
+    }
   };
 
-  const handlePayment = (e: React.FormEvent) => {
+  const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const due = getDueAmount();
@@ -74,53 +114,68 @@ const PayFee = ({ student, onPayment }: PayFeeProps) => {
       return;
     }
 
-    const now = new Date();
-    const txnId = "TXN" + now.getTime();
-    
-    const receipt = {
-      time: now.toLocaleTimeString(),
-      date: now.toLocaleDateString(),
-      student_name: student.name,
-      student_course: student.course,
-      student_branch: student.branch,
-      student_mobile: student.mobile,
-      year: selectedYear,
-      fee_type: selectedFeeType,
-      payment_method: paymentMethod,
-      txn_id: txnId,
-      paid_amount: payAmount
-    };
+    setLoading(true);
 
-    // Update student data
-    const updatedStudent = { ...student };
-    updatedStudent.transactions.push(
-      `${receipt.date} ${receipt.time}: Paid ₹${payAmount} for ${selectedFeeType} (${selectedYear}) via ${paymentMethod} [${txnId}]`
-    );
-    
-    updatedStudent.duesByYear[selectedYear][selectedFeeType] -= payAmount;
-    if (updatedStudent.duesByYear[selectedYear][selectedFeeType] < 0) {
-      updatedStudent.duesByYear[selectedYear][selectedFeeType] = 0;
+    try {
+      const txnId = await updateStudentFeeInDatabase(payAmount);
+
+      // Update local student data
+      const updatedStudent = { ...student };
+      
+      // Update dues
+      if (!updatedStudent.duesByYear) updatedStudent.duesByYear = {};
+      if (!updatedStudent.duesByYear[selectedYear]) updatedStudent.duesByYear[selectedYear] = {};
+      updatedStudent.duesByYear[selectedYear][selectedFeeType] = due - payAmount;
+
+      // Add transaction to local data
+      if (!updatedStudent.transactions) updatedStudent.transactions = [];
+      const now = new Date();
+      updatedStudent.transactions.unshift(
+        `${now.toLocaleDateString()} ${now.toLocaleTimeString()}: Paid ₹${payAmount} for ${selectedFeeType} (${selectedYear}) via ${paymentMethod} [${txnId}]`
+      );
+
+      onPayment(updatedStudent);
+      generateReceipt(payAmount, txnId);
+      setAmount("");
+      toast.success("Payment successful!");
+    } catch (error) {
+      toast.error("Payment failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    // Remove fines if fully paid
-    if (updatedStudent.duesByYear[selectedYear][selectedFeeType] === 0) {
-      updatedStudent.fines = updatedStudent.fines.filter((fn: any) => fn.feeName !== selectedFeeType);
-    }
-
-    onPayment(updatedStudent);
-    setLastReceipt(receipt);
-    setAmount("");
-    toast.success("Payment successful!");
   };
 
-  const downloadReceipt = () => {
-    if (!lastReceipt) {
-      toast.error("No recent payment to download");
-      return;
-    }
-
-    // Note: In a real implementation, you would use jsPDF here
-    toast.success("Receipt download feature would be implemented with jsPDF");
+  const generateReceipt = (paidAmount: number, txnId: string) => {
+    const doc = new jsPDF();
+    const now = new Date();
+    
+    // Header
+    doc.setFontSize(20);
+    doc.text('Fee Payment Receipt', 105, 30, { align: 'center' });
+    
+    // Student Details
+    doc.setFontSize(12);
+    doc.text(`Student Name: ${student.name}`, 20, 60);
+    doc.text(`Student ID: ${student.id}`, 20, 70);
+    doc.text(`Course: ${student.course}`, 20, 80);
+    doc.text(`Branch: ${student.branch}`, 20, 90);
+    doc.text(`Mobile: ${student.mobile}`, 20, 100);
+    
+    // Payment Details
+    doc.text(`Date: ${now.toLocaleDateString()}`, 20, 120);
+    doc.text(`Time: ${now.toLocaleTimeString()}`, 20, 130);
+    doc.text(`Academic Year: ${selectedYear}`, 20, 140);
+    doc.text(`Fee Type: ${selectedFeeType}`, 20, 150);
+    doc.text(`Amount Paid: ₹${paidAmount.toLocaleString()}`, 20, 160);
+    doc.text(`Payment Method: ${paymentMethod}`, 20, 170);
+    doc.text(`Transaction ID: ${txnId}`, 20, 180);
+    
+    // Footer
+    doc.text('Thank you for your payment!', 105, 220, { align: 'center' });
+    
+    // Download
+    doc.save(`Receipt_${student.name}_${txnId}.pdf`);
+    toast.success("Receipt downloaded successfully!");
   };
 
   return (
@@ -158,6 +213,12 @@ const PayFee = ({ student, onPayment }: PayFeeProps) => {
           </div>
         </div>
 
+        {selectedFeeType && (
+          <div className="bg-white/10 rounded-xl p-4 border border-white/20">
+            <p className="text-gray-300">Due Amount: <span className="text-red-400 font-bold">₹{getDueAmount().toLocaleString()}</span></p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-gray-300 mb-2">Amount:</label>
@@ -168,8 +229,9 @@ const PayFee = ({ student, onPayment }: PayFeeProps) => {
               max={getDueAmount()}
               min="1"
               required
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder={`Max: ₹${getDueAmount()}`}
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              placeholder={`Max: ₹${getDueAmount().toLocaleString()}`}
             />
           </div>
           
@@ -178,7 +240,8 @@ const PayFee = ({ student, onPayment }: PayFeeProps) => {
             <select
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
               {paymentMethods.map(method => (
                 <option key={method} value={method} className="bg-gray-800">{method}</option>
@@ -188,27 +251,15 @@ const PayFee = ({ student, onPayment }: PayFeeProps) => {
         </div>
 
         <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: loading ? 1 : 1.02 }}
+          whileTap={{ scale: loading ? 1 : 0.98 }}
           type="submit"
-          className={`w-full ${getButtonColor()} text-white py-3 px-6 rounded-xl font-semibold transition-all shadow-lg`}
+          disabled={loading || !selectedFeeType || !amount}
+          className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-3 px-6 rounded-xl font-semibold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Pay ₹{amount || 0}
+          {loading ? "Processing Payment..." : `Pay ₹${amount || 0}`}
         </motion.button>
       </form>
-
-      {lastReceipt && (
-        <motion.button
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={downloadReceipt}
-          className="mt-4 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-xl font-semibold transition-all"
-        >
-          📄 Download Last Receipt (PDF)
-        </motion.button>
-      )}
     </div>
   );
 };

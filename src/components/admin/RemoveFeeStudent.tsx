@@ -1,68 +1,74 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { students, fees, years } from "../../data/mockData";
+import { useStudents } from "../../hooks/useStudents";
+import { useFees } from "../../hooks/useFees";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const RemoveFeeStudent = () => {
   const [formData, setFormData] = useState({
-    name: "",
-    pin: "",
-    branch: "",
-    year: years[0],
+    studentId: "",
+    year: "2024-25",
     feeType: ""
   });
+  const [loading, setLoading] = useState(false);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const { students } = useStudents();
+  const { fees } = useFees();
+  const years = ["2024-25", "2025-26", "2026-27", "2027-28"];
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     
-    const student = students.find(s => 
-      s.name === formData.name && 
-      s.pin === formData.pin && 
-      s.branch === formData.branch
-    );
-    
-    if (!student) {
-      toast.error("Student not found. Check name, pin, and branch.");
-      return;
-    }
+    try {
+      const student = students.find(s => s.id === formData.studentId);
+      if (!student) {
+        toast.error("Student not found");
+        return;
+      }
 
-    let removed = false;
-    
-    if (student.feesByYear[formData.year] && student.feesByYear[formData.year][formData.feeType] !== undefined) {
-      delete student.feesByYear[formData.year][formData.feeType];
-      removed = true;
-    }
-    
-    if (student.duesByYear[formData.year] && student.duesByYear[formData.year][formData.feeType] !== undefined) {
-      delete student.duesByYear[formData.year][formData.feeType];
-      removed = true;
-    }
-    
-    if (student.extraFees) {
-      const originalLength = student.extraFees.length;
-      student.extraFees = student.extraFees.filter((ef: any) => !(ef.year === formData.year && ef.name === formData.feeType));
-      if (student.extraFees.length < originalLength) removed = true;
-    }
+      // Remove from student_fees table
+      const { error: deleteError } = await supabase
+        .from('student_fees')
+        .delete()
+        .eq('student_id', formData.studentId)
+        .eq('fee_name', formData.feeType)
+        .eq('year', formData.year);
 
-    if (removed) {
+      if (deleteError) throw deleteError;
+
+      // Add transaction record for the fee removal
+      const { error: transactionError } = await supabase
+        .from('transactions')
+        .insert({
+          student_id: formData.studentId,
+          description: `Fee removed: ${formData.feeType} (${formData.year})`,
+          amount: 0,
+          transaction_type: 'fee_removed'
+        });
+
+      if (transactionError) throw transactionError;
+
       toast.success("Fee type removed for this student/year.");
-    } else {
-      toast.error("Fee type not found for this student/year.");
+      
+      setFormData({
+        studentId: "",
+        year: "2024-25",
+        feeType: ""
+      });
+    } catch (error) {
+      console.error('Error removing fee:', error);
+      toast.error("Failed to remove fee. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    
-    setFormData({
-      name: "",
-      pin: "",
-      branch: "",
-      year: years[0],
-      feeType: ""
-    });
   };
 
   return (
@@ -76,41 +82,22 @@ const RemoveFeeStudent = () => {
         className="space-y-6 max-w-2xl"
       >
         <div>
-          <label className="block text-gray-300 mb-2">Student Name:</label>
-          <input
-            type="text"
-            name="name"
-            value={formData.name}
+          <label className="block text-gray-300 mb-2">Student:</label>
+          <select
+            name="studentId"
+            value={formData.studentId}
             onChange={handleInputChange}
             required
-            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-gray-300 mb-2">Pin Number:</label>
-            <input
-              type="text"
-              name="pin"
-              value={formData.pin}
-              onChange={handleInputChange}
-              required
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-gray-300 mb-2">Branch:</label>
-            <input
-              type="text"
-              name="branch"
-              value={formData.branch}
-              onChange={handleInputChange}
-              required
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
+            disabled={loading}
+            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+          >
+            <option value="" className="bg-gray-800">Select Student</option>
+            {students.map(student => (
+              <option key={student.id} value={student.id} className="bg-gray-800">
+                {student.name} ({student.student_id}) - {student.branch}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -120,7 +107,8 @@ const RemoveFeeStudent = () => {
               name="year"
               value={formData.year}
               onChange={handleInputChange}
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
             >
               {years.map(year => (
                 <option key={year} value={year} className="bg-gray-800">{year}</option>
@@ -135,23 +123,25 @@ const RemoveFeeStudent = () => {
               value={formData.feeType}
               onChange={handleInputChange}
               required
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
             >
               <option value="" className="bg-gray-800">Select Fee Type</option>
               {fees.map(fee => (
-                <option key={fee.name} value={fee.name} className="bg-gray-800">{fee.desc}</option>
+                <option key={fee.name} value={fee.name} className="bg-gray-800">{fee.name}</option>
               ))}
             </select>
           </div>
         </div>
 
         <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: loading ? 1 : 1.02 }}
+          whileTap={{ scale: loading ? 1 : 0.98 }}
           type="submit"
-          className="bg-gradient-to-r from-red-500 to-pink-500 text-white py-3 px-8 rounded-xl font-semibold transition-all shadow-lg"
+          disabled={loading}
+          className="bg-gradient-to-r from-red-500 to-pink-500 text-white py-3 px-8 rounded-xl font-semibold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Remove Fee for Student
+          {loading ? "Removing Fee..." : "Remove Fee for Student"}
         </motion.button>
       </motion.form>
     </div>

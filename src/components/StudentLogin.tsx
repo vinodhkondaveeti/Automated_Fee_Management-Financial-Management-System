@@ -3,6 +3,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import LoginBackground from "./backgrounds/LoginBackground";
 import { useStudents } from "../hooks/useStudents";
+import { useFees } from "../hooks/useFees";
 import { toast } from "sonner";
 
 interface StudentLoginProps {
@@ -15,6 +16,7 @@ const StudentLogin = ({ onLogin, onBack }: StudentLoginProps) => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { authenticateStudent } = useStudents();
+  const { getStudentFees } = useFees();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +30,23 @@ const StudentLogin = ({ onLogin, onBack }: StudentLoginProps) => {
         return;
       }
 
+      // Fetch student's fee records
+      const { data: studentFees } = await getStudentFees(student.id);
+
+      // Structure fees by year for compatibility with existing components
+      const feesByYear: any = {};
+      const duesByYear: any = {};
+      
+      // Group fees by year
+      studentFees.forEach((fee: any) => {
+        if (!feesByYear[fee.year]) {
+          feesByYear[fee.year] = {};
+          duesByYear[fee.year] = {};
+        }
+        feesByYear[fee.year][fee.fee_name] = fee.total_amount;
+        duesByYear[fee.year][fee.fee_name] = fee.due_amount;
+      });
+
       // Convert database student to legacy format for compatibility
       const legacyStudent = {
         id: student.student_id,
@@ -38,8 +57,8 @@ const StudentLogin = ({ onLogin, onBack }: StudentLoginProps) => {
         branch: student.branch,
         mobile: student.mobile,
         photoColor: student.photo_color,
-        feesByYear: {},
-        duesByYear: {},
+        feesByYear,
+        duesByYear,
         fines: [],
         extraFees: [],
         transactions: []

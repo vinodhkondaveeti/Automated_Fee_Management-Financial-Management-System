@@ -1,68 +1,66 @@
 
-import { useState } from "react";
 import { motion } from "framer-motion";
-import { fees, years } from "../../data/mockData";
 
 interface FeeDetailsProps {
   student: any;
 }
 
 const FeeDetails = ({ student }: FeeDetailsProps) => {
-  const [selectedYear, setSelectedYear] = useState(years[0]);
+  const years = Object.keys(student.feesByYear || {});
+  
+  if (years.length === 0) {
+    return (
+      <div className="text-white text-center py-8">
+        <p className="text-gray-300">No fee records found.</p>
+        <p className="text-sm text-gray-400 mt-2">Fee records will be initialized by admin.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="text-white">
-      <h3 className="text-2xl font-bold mb-6">Fee Payment Details</h3>
+      <h3 className="text-2xl font-bold mb-6 text-center">Fee Details</h3>
       
-      <div className="mb-6">
-        <label className="block text-gray-300 mb-2">Select Year:</label>
-        <select
-          value={selectedYear}
-          onChange={(e) => setSelectedYear(e.target.value)}
-          className="bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {years.map(year => (
-            <option key={year} value={year} className="bg-gray-800">{year}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-b border-white/20">
-              <th className="text-left p-3 text-gray-300">Type</th>
-              <th className="text-left p-3 text-gray-300">Description</th>
-              <th className="text-left p-3 text-gray-300">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {fees.map(fee => (
-              <motion.tr
-                key={fee.name}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="border-b border-white/10"
-              >
-                <td className="p-3">{fee.name}</td>
-                <td className="p-3">{fee.desc}</td>
-                <td className="p-3">₹{student.feesByYear[selectedYear][fee.name] || 0}</td>
-              </motion.tr>
-            ))}
-            {student.extraFees?.filter((ef: any) => ef.year === selectedYear).map((ef: any, index: number) => (
-              <motion.tr
-                key={`extra-${index}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="border-b border-white/10 text-red-400"
-              >
-                <td className="p-3">{ef.name}</td>
-                <td className="p-3">{ef.desc}</td>
-                <td className="p-3">₹{ef.amount}</td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="space-y-6">
+        {years.map((year, yearIndex) => (
+          <motion.div
+            key={year}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: yearIndex * 0.1 }}
+            className="bg-white/10 rounded-xl p-6 border border-white/20"
+          >
+            <h4 className="text-xl font-semibold mb-4 text-blue-300">{year}</h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Object.entries(student.feesByYear[year] || {}).map(([feeName, amount], index) => (
+                <motion.div
+                  key={feeName}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: (yearIndex * 0.1) + (index * 0.05) }}
+                  className="bg-white/5 rounded-lg p-4 border border-white/10"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">{feeName}</span>
+                    <span className="text-green-400 font-bold">₹{amount?.toLocaleString()}</span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+            
+            <div className="mt-4 pt-4 border-t border-white/20">
+              <div className="flex justify-between items-center text-lg font-bold">
+                <span>Total for {year}:</span>
+                <span className="text-yellow-400">
+                  ₹{Object.values(student.feesByYear[year] || {})
+                    .reduce((sum: number, amount: any) => sum + (amount || 0), 0)
+                    .toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        ))}
       </div>
     </div>
   );

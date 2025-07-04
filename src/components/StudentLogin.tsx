@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import LoginBackground from "./backgrounds/LoginBackground";
-import { students } from "../data/mockData";
+import { useStudents } from "../hooks/useStudents";
+import { toast } from "sonner";
 
 interface StudentLoginProps {
   onLogin: (user: any) => void;
@@ -12,17 +13,45 @@ interface StudentLoginProps {
 const StudentLogin = ({ onLogin, onBack }: StudentLoginProps) => {
   const [studentId, setStudentId] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { authenticateStudent } = useStudents();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setLoading(true);
 
-    const student = students.find(s => s.id === studentId && s.password === password);
-    if (student) {
-      onLogin(student);
-    } else {
-      setError("Invalid Student ID or Password");
+    try {
+      const { data: student, error } = await authenticateStudent(studentId, password);
+      
+      if (error || !student) {
+        toast.error("Invalid Student ID or Password");
+        return;
+      }
+
+      // Convert database student to legacy format for compatibility
+      const legacyStudent = {
+        id: student.student_id,
+        password: student.password,
+        name: student.name,
+        pin: student.pin,
+        course: student.course,
+        branch: student.branch,
+        mobile: student.mobile,
+        photoColor: student.photo_color,
+        feesByYear: {},
+        duesByYear: {},
+        fines: [],
+        extraFees: [],
+        transactions: []
+      };
+
+      onLogin(legacyStudent);
+      toast.success(`Welcome back, ${student.name}!`);
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error("Login failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -52,6 +81,7 @@ const StudentLogin = ({ onLogin, onBack }: StudentLoginProps) => {
               className="w-full p-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter your student ID"
               required
+              disabled={loading}
             />
           </div>
           <div>
@@ -63,32 +93,26 @@ const StudentLogin = ({ onLogin, onBack }: StudentLoginProps) => {
               className="w-full p-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter your password"
               required
+              disabled={loading}
             />
           </div>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-red-400 text-center"
-            >
-              {error}
-            </motion.div>
-          )}
           <div className="space-y-3">
             <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: loading ? 1 : 1.02 }}
+              whileTap={{ scale: loading ? 1 : 0.98 }}
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 hover:from-blue-600 hover:to-cyan-600 shadow-lg"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 hover:from-blue-600 hover:to-cyan-600 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Login
+              {loading ? "Logging in..." : "Login"}
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               type="button"
               onClick={onBack}
-              className="w-full bg-gray-600 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 hover:bg-gray-700 shadow-lg"
+              disabled={loading}
+              className="w-full bg-gray-600 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 hover:bg-gray-700 shadow-lg disabled:opacity-50"
             >
               Back
             </motion.button>

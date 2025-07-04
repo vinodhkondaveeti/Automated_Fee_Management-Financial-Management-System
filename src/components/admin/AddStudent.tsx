@@ -1,12 +1,13 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { students, fees, years } from "../../data/mockData";
+import { useStudents } from "../../hooks/useStudents";
+import { useFees } from "../../hooks/useFees";
 import { toast } from "sonner";
 
 const AddStudent = () => {
   const [formData, setFormData] = useState({
-    id: "",
+    student_id: "",
     password: "",
     name: "",
     pin: "",
@@ -14,6 +15,10 @@ const AddStudent = () => {
     branch: "",
     mobile: ""
   });
+  const [loading, setLoading] = useState(false);
+  
+  const { addStudent, students } = useStudents();
+  const { initializeStudentFees } = useFees();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -24,61 +29,66 @@ const AddStudent = () => {
     return !students.some(s => s.pin === pin);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const validateUniqueStudentId = (studentId: string): boolean => {
+    return !students.some(s => s.student_id === studentId);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validate Student ID uniqueness
-    if (students.some(s => s.id === formData.id)) {
-      toast.error("Student ID already exists");
-      return;
-    }
+    setLoading(true);
 
-    // Validate Pin uniqueness
-    if (!validateUniquePin(formData.pin)) {
-      toast.error("Pin number already exists. Please use a unique pin number.");
-      return;
-    }
-
-    // Validate mobile number
-    if (formData.mobile.length !== 10 || !/^\d+$/.test(formData.mobile)) {
-      toast.error("Mobile number must be exactly 10 digits");
-      return;
-    }
-
-    const feesByYear: any = {};
-    const duesByYear: any = {};
-    
-    for (let y of years) {
-      feesByYear[y] = {};
-      duesByYear[y] = {};
-      for (let f of fees) {
-        feesByYear[y][f.name] = f.amount;
-        duesByYear[y][f.name] = f.amount;
+    try {
+      // Validate Student ID uniqueness
+      if (!validateUniqueStudentId(formData.student_id)) {
+        toast.error("Student ID already exists");
+        return;
       }
+
+      // Validate Pin uniqueness
+      if (!validateUniquePin(formData.pin)) {
+        toast.error("Pin number already exists. Please use a unique pin number.");
+        return;
+      }
+
+      // Validate mobile number
+      if (formData.mobile.length !== 10 || !/^\d+$/.test(formData.mobile)) {
+        toast.error("Mobile number must be exactly 10 digits");
+        return;
+      }
+
+      const studentData = {
+        ...formData,
+        photo_color: `#${Math.floor(Math.random()*16777215).toString(16)}`
+      };
+
+      const { data: newStudent, error } = await addStudent(studentData);
+      
+      if (error || !newStudent) {
+        toast.error("Failed to add student. Please try again.");
+        return;
+      }
+
+      // Initialize fee records for the new student
+      await initializeStudentFees(newStudent.id);
+
+      toast.success("Student added successfully!");
+      
+      // Reset form
+      setFormData({
+        student_id: "",
+        password: "",
+        name: "",
+        pin: "",
+        course: "B.Tech",
+        branch: "",
+        mobile: ""
+      });
+    } catch (error) {
+      console.error('Error adding student:', error);
+      toast.error("Failed to add student. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    const newStudent = {
-      ...formData,
-      photoColor: `#${Math.floor(Math.random()*16777215).toString(16)}`,
-      feesByYear,
-      duesByYear,
-      fines: [],
-      extraFees: [],
-      transactions: []
-    };
-
-    students.push(newStudent);
-    toast.success("Student added successfully!");
-    
-    setFormData({
-      id: "",
-      password: "",
-      name: "",
-      pin: "",
-      course: "B.Tech",
-      branch: "",
-      mobile: ""
-    });
   };
 
   return (
@@ -96,11 +106,12 @@ const AddStudent = () => {
             <label className="block text-gray-300 mb-2">Student ID:</label>
             <input
               type="text"
-              name="id"
-              value={formData.id}
+              name="student_id"
+              value={formData.student_id}
               onChange={handleInputChange}
               required
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
             />
           </div>
           
@@ -112,7 +123,8 @@ const AddStudent = () => {
               value={formData.password}
               onChange={handleInputChange}
               required
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
             />
           </div>
         </div>
@@ -125,7 +137,8 @@ const AddStudent = () => {
             value={formData.name}
             onChange={handleInputChange}
             required
-            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            disabled={loading}
+            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
           />
         </div>
 
@@ -138,7 +151,8 @@ const AddStudent = () => {
               value={formData.pin}
               onChange={handleInputChange}
               required
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
             />
             {formData.pin && !validateUniquePin(formData.pin) && (
               <p className="text-red-400 text-sm mt-1">This pin number already exists</p>
@@ -153,7 +167,8 @@ const AddStudent = () => {
               value={formData.course}
               onChange={handleInputChange}
               required
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
             />
           </div>
         </div>
@@ -167,7 +182,8 @@ const AddStudent = () => {
               value={formData.branch}
               onChange={handleInputChange}
               required
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
             />
           </div>
           
@@ -181,18 +197,20 @@ const AddStudent = () => {
               required
               pattern="[0-9]{10}"
               maxLength={10}
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              disabled={loading}
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
             />
           </div>
         </div>
 
         <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: loading ? 1 : 1.02 }}
+          whileTap={{ scale: loading ? 1 : 0.98 }}
           type="submit"
-          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-8 rounded-xl font-semibold transition-all shadow-lg"
+          disabled={loading}
+          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-8 rounded-xl font-semibold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Add Student
+          {loading ? "Adding Student..." : "Add Student"}
         </motion.button>
       </motion.form>
     </div>

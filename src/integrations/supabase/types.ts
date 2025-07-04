@@ -9,7 +9,219 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      admins: {
+        Row: {
+          admin_id: string
+          created_at: string | null
+          id: string
+          mobile: string
+          name: string
+          password: string
+          photo_color: string | null
+          role: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string | null
+          id?: string
+          mobile: string
+          name: string
+          password: string
+          photo_color?: string | null
+          role?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string | null
+          id?: string
+          mobile?: string
+          name?: string
+          password?: string
+          photo_color?: string | null
+          role?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      fee_deadlines: {
+        Row: {
+          branch: string
+          created_at: string | null
+          created_by: string | null
+          deadline: string
+          fee_type: string
+          id: string
+        }
+        Insert: {
+          branch: string
+          created_at?: string | null
+          created_by?: string | null
+          deadline: string
+          fee_type: string
+          id?: string
+        }
+        Update: {
+          branch?: string
+          created_at?: string | null
+          created_by?: string | null
+          deadline?: string
+          fee_type?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fee_deadlines_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "admins"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fees: {
+        Row: {
+          amount: number
+          created_at: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      student_fees: {
+        Row: {
+          created_at: string | null
+          due_amount: number
+          fee_name: string
+          id: string
+          paid_amount: number
+          student_id: string | null
+          total_amount: number
+          updated_at: string | null
+          year: string
+        }
+        Insert: {
+          created_at?: string | null
+          due_amount?: number
+          fee_name: string
+          id?: string
+          paid_amount?: number
+          student_id?: string | null
+          total_amount: number
+          updated_at?: string | null
+          year: string
+        }
+        Update: {
+          created_at?: string | null
+          due_amount?: number
+          fee_name?: string
+          id?: string
+          paid_amount?: number
+          student_id?: string | null
+          total_amount?: number
+          updated_at?: string | null
+          year?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_fees_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      students: {
+        Row: {
+          branch: string
+          course: string
+          created_at: string | null
+          id: string
+          mobile: string
+          name: string
+          password: string
+          photo_color: string | null
+          pin: string
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          branch: string
+          course: string
+          created_at?: string | null
+          id?: string
+          mobile: string
+          name: string
+          password: string
+          photo_color?: string | null
+          pin: string
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          branch?: string
+          course?: string
+          created_at?: string | null
+          id?: string
+          mobile?: string
+          name?: string
+          password?: string
+          photo_color?: string | null
+          pin?: string
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          amount: number
+          created_at: string | null
+          description: string
+          id: string
+          student_id: string | null
+          transaction_type: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          description: string
+          id?: string
+          student_id?: string | null
+          transaction_type?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          description?: string
+          id?: string
+          student_id?: string | null
+          transaction_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

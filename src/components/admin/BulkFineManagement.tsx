@@ -2,15 +2,16 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useStudents } from "../../hooks/useStudents";
-import { useFees } from "../../hooks/useFees";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Search, X } from "lucide-react";
 
-const RemoveFeeStudent = () => {
+const BulkFineManagement = () => {
   const [formData, setFormData] = useState({
     year: "2024-25",
-    feeType: ""
+    fineName: "",
+    fineDescription: "",
+    amount: ""
   });
   const [loading, setLoading] = useState(false);
   const [searchPin, setSearchPin] = useState("");
@@ -18,14 +19,13 @@ const RemoveFeeStudent = () => {
   const [showDropdown, setShowDropdown] = useState(false);
 
   const { students } = useStudents();
-  const { fees } = useFees();
   const years = ["2024-25", "2025-26", "2026-27", "2027-28"];
 
   const filteredStudents = students.filter(student => 
     searchPin === "" || student.pin.toLowerCase().includes(searchPin.toLowerCase())
   );
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -52,54 +52,61 @@ const RemoveFeeStudent = () => {
     setLoading(true);
     
     try {
+      const amount = parseInt(formData.amount);
       let successCount = 0;
       let errorCount = 0;
 
       for (const student of selectedStudents) {
         try {
-          // Remove from student_fees table
-          const { error: deleteError } = await supabase
+          // Add to student_fees table
+          const { error: feeError } = await supabase
             .from('student_fees')
-            .delete()
-            .eq('student_id', student.id)
-            .eq('fee_name', formData.feeType)
-            .eq('year', formData.year);
+            .insert({
+              student_id: student.id,
+              fee_name: formData.fineName,
+              year: formData.year,
+              total_amount: amount,
+              due_amount: amount,
+              paid_amount: 0
+            });
 
-          if (deleteError) throw deleteError;
+          if (feeError) throw feeError;
 
-          // Add transaction record for the fee removal
+          // Add transaction record for the fine
           const { error: transactionError } = await supabase
             .from('transactions')
             .insert({
               student_id: student.id,
-              description: `Fee removed: ${formData.feeType} (${formData.year})`,
-              amount: 0,
-              transaction_type: 'fee_removed'
+              description: `Fine added: ${formData.fineDescription} (${formData.year})`,
+              amount: amount,
+              transaction_type: 'fine_added'
             });
 
           if (transactionError) throw transactionError;
           successCount++;
         } catch (error) {
-          console.error(`Error removing fee for ${student.name}:`, error);
+          console.error(`Error adding fine for ${student.name}:`, error);
           errorCount++;
         }
       }
 
       if (successCount > 0) {
-        toast.success(`Fee removed for ${successCount} student(s)`);
+        toast.success(`Fine added for ${successCount} student(s)`);
       }
       if (errorCount > 0) {
-        toast.error(`Failed to remove fee for ${errorCount} student(s)`);
+        toast.error(`Failed to add fine for ${errorCount} student(s)`);
       }
       
       setFormData({
         year: "2024-25",
-        feeType: ""
+        fineName: "",
+        fineDescription: "",
+        amount: ""
       });
       setSelectedStudents([]);
     } catch (error) {
-      console.error('Error removing fees:', error);
-      toast.error("Failed to remove fees. Please try again.");
+      console.error('Error adding fines:', error);
+      toast.error("Failed to add fines. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -107,7 +114,7 @@ const RemoveFeeStudent = () => {
 
   return (
     <div className="text-white">
-      <h3 className="text-2xl font-bold mb-6">Remove Fee Type for Students</h3>
+      <h3 className="text-2xl font-bold mb-6">Add Fine to Multiple Students</h3>
       
       <motion.form
         initial={{ opacity: 0 }}
@@ -152,14 +159,14 @@ const RemoveFeeStudent = () => {
         {selectedStudents.length > 0 && (
           <div>
             <label className="block text-gray-300 mb-2">Selected Students ({selectedStudents.length}):</label>
-            <div className="bg-white/5 rounded-xl p-4 max-h-32 overflow-y-auto">
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 max-h-32 overflow-y-auto">
               <div className="flex flex-wrap gap-2">
                 {selectedStudents.map((student) => (
                   <div
                     key={student.id}
-                    className="bg-purple-500/20 border border-purple-500/30 rounded-lg px-3 py-1 flex items-center gap-2"
+                    className="bg-orange-500/20 border border-orange-500/30 rounded-lg px-3 py-1 flex items-center gap-2"
                   >
-                    <span className="text-purple-300 text-sm">{student.name} (PIN: {student.pin})</span>
+                    <span className="text-orange-300 text-sm">{student.name} (PIN: {student.pin})</span>
                     <button
                       type="button"
                       onClick={() => removeSelectedStudent(student.id)}
@@ -191,21 +198,46 @@ const RemoveFeeStudent = () => {
           </div>
           
           <div>
-            <label className="block text-gray-300 mb-2">Fee Type:</label>
-            <select
-              name="feeType"
-              value={formData.feeType}
+            <label className="block text-gray-300 mb-2">Fine Amount:</label>
+            <input
+              type="number"
+              name="amount"
+              value={formData.amount}
               onChange={handleInputChange}
+              min="1"
               required
               disabled={loading}
               className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-            >
-              <option value="" className="bg-gray-800">Select Fee Type</option>
-              {fees.map(fee => (
-                <option key={fee.name} value={fee.name} className="bg-gray-800">{fee.name}</option>
-              ))}
-            </select>
+            />
           </div>
+        </div>
+
+        <div>
+          <label className="block text-gray-300 mb-2">Fine Name:</label>
+          <input
+            type="text"
+            name="fineName"
+            value={formData.fineName}
+            onChange={handleInputChange}
+            required
+            disabled={loading}
+            placeholder="e.g., Late Submission Fine, Library Fine, etc."
+            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+          />
+        </div>
+
+        <div>
+          <label className="block text-gray-300 mb-2">Fine Description:</label>
+          <input
+            type="text"
+            name="fineDescription"
+            value={formData.fineDescription}
+            onChange={handleInputChange}
+            required
+            disabled={loading}
+            placeholder="Detailed description of the fine"
+            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+          />
         </div>
 
         <motion.button
@@ -213,13 +245,13 @@ const RemoveFeeStudent = () => {
           whileTap={{ scale: loading ? 1 : 0.98 }}
           type="submit"
           disabled={loading || selectedStudents.length === 0}
-          className="bg-gradient-to-r from-red-500 to-pink-500 text-white py-3 px-8 rounded-xl font-semibold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-gradient-to-r from-orange-500 to-red-500 text-white py-3 px-8 rounded-xl font-semibold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? "Removing Fees..." : `Remove Fee for ${selectedStudents.length} Student(s)`}
+          {loading ? "Adding Fines..." : `Add Fine to ${selectedStudents.length} Student(s)`}
         </motion.button>
       </motion.form>
     </div>
   );
 };
 
-export default RemoveFeeStudent;
+export default BulkFineManagement;

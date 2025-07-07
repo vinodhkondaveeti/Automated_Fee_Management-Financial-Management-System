@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { motion } from "framer-motion";
 import AdminDashboardBackground from "./backgrounds/AdminDashboardBackground";
@@ -11,6 +10,8 @@ import AllTransactions from "./admin/AllTransactions";
 import RemoveFeeStudent from "./admin/RemoveFeeStudent";
 import BulkStudentImport from "./admin/BulkStudentImport";
 import FeeDeadlineManager from "./admin/FeeDeadlineManager";
+import RemoveStudent from "./admin/RemoveStudent";
+import BulkFineManagement from "./admin/BulkFineManagement";
 
 interface AdminDashboardProps {
   user: any;
@@ -31,8 +32,10 @@ const AdminDashboard = ({ user, onLogout }: AdminDashboardProps) => {
     { id: "fee-management", label: "Fee Management", icon: "💰" },
     { id: "deadline-manager", label: "Fee Deadlines", icon: "⏰" },
     { id: "add-extra-fee", label: "Extra Fee", icon: "📋" },
+    { id: "bulk-fine", label: "Bulk Fine", icon: "⚠️" },
     { id: "transactions", label: "Transactions", icon: "📊" },
-    { id: "remove-fee", label: "Remove Fee", icon: "🗑️" }
+    { id: "remove-fee", label: "Remove Fee", icon: "🗑️" },
+    { id: "remove-student", label: "Remove Student", icon: "❌" }
   ];
 
   const renderTabContent = () => {
@@ -49,10 +52,14 @@ const AdminDashboard = ({ user, onLogout }: AdminDashboardProps) => {
         return <FeeDeadlineManager />;
       case "add-extra-fee":
         return <AddExtraFee />;
+      case "bulk-fine":
+        return <BulkFineManagement />;
       case "transactions":
         return <AllTransactions />;
       case "remove-fee":
         return <RemoveFeeStudent />;
+      case "remove-student":
+        return <RemoveStudent />;
       default:
         return <StudentList />;
     }

@@ -2,19 +2,24 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useStudents } from "../../hooks/useStudents";
-import { useFees } from "../../hooks/useFees";
 import { supabase } from "@/integrations/supabase/client";
+import { Search } from "lucide-react";
 
 const StudentList = () => {
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [studentFees, setStudentFees] = useState<any[]>([]);
   const [studentTransactions, setStudentTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchPin, setSearchPin] = useState("");
   const { students, loading: studentsLoading } = useStudents();
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
+
+  const filteredStudents = students.filter(student => 
+    searchPin === "" || student.pin.toLowerCase().includes(searchPin.toLowerCase())
+  );
 
   const fetchStudentDetails = async (student: any) => {
     setLoading(true);
@@ -66,15 +71,36 @@ const StudentList = () => {
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
-          <h4 className="text-lg font-semibold mb-4">Student List</h4>
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="text-lg font-semibold">Student List</h4>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search by PIN..."
+                value={searchPin}
+                onChange={(e) => setSearchPin(e.target.value)}
+                className="bg-white/10 border border-white/20 rounded-xl pl-10 pr-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+          </div>
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {students.length === 0 ? (
+            {filteredStudents.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
-                <p>No students found</p>
-                <p className="text-sm">Add students to get started</p>
+                {searchPin ? (
+                  <>
+                    <p>No students found with PIN: {searchPin}</p>
+                    <p className="text-sm">Try a different PIN number</p>
+                  </>
+                ) : (
+                  <>
+                    <p>No students found</p>
+                    <p className="text-sm">Add students to get started</p>
+                  </>
+                )}
               </div>
             ) : (
-              students.map((student, index) => (
+              filteredStudents.map((student, index) => (
                 <motion.div
                   key={student.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -93,7 +119,7 @@ const StudentList = () => {
                     <div>
                       <p className="font-semibold">{student.name}</p>
                       <p className="text-sm text-gray-400">{student.student_id} - {student.branch}</p>
-                      <p className="text-sm text-gray-400">{student.mobile}</p>
+                      <p className="text-sm text-gray-400">PIN: {student.pin} | {student.mobile}</p>
                     </div>
                   </div>
                 </motion.div>

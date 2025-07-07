@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useStudents } from "../../hooks/useStudents";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Search } from "lucide-react";
 
 const AddExtraFee = () => {
   const [formData, setFormData] = useState({
@@ -14,13 +15,27 @@ const AddExtraFee = () => {
     amount: ""
   });
   const [loading, setLoading] = useState(false);
+  const [searchPin, setSearchPin] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
 
   const { students } = useStudents();
   const years = ["2024-25", "2025-26", "2026-27", "2027-28"];
 
+  const filteredStudents = students.filter(student => 
+    searchPin === "" || student.pin.toLowerCase().includes(searchPin.toLowerCase())
+  );
+
+  const selectedStudent = students.find(s => s.id === formData.studentId);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleStudentSelect = (student: any) => {
+    setFormData(prev => ({ ...prev, studentId: student.id }));
+    setSearchPin(student.pin);
+    setShowDropdown(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,6 +86,7 @@ const AddExtraFee = () => {
         desc: "",
         amount: ""
       });
+      setSearchPin("");
     } catch (error) {
       console.error('Error adding extra fee:', error);
       toast.error("Failed to add extra fee. Please try again.");
@@ -90,23 +106,48 @@ const AddExtraFee = () => {
         className="space-y-6 max-w-2xl"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-gray-300 mb-2">Student:</label>
-            <select
-              name="studentId"
-              value={formData.studentId}
-              onChange={handleInputChange}
-              required
-              disabled={loading}
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-            >
-              <option value="" className="bg-gray-800">Select Student</option>
-              {students.map(student => (
-                <option key={student.id} value={student.id} className="bg-gray-800">
-                  {student.name} ({student.student_id})
-                </option>
-              ))}
-            </select>
+          <div className="relative">
+            <label className="block text-gray-300 mb-2">Search Student by PIN:</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Enter PIN to search..."
+                value={searchPin}
+                onChange={(e) => {
+                  setSearchPin(e.target.value);
+                  setShowDropdown(true);
+                  if (e.target.value === "") {
+                    setFormData(prev => ({ ...prev, studentId: "" }));
+                  }
+                }}
+                onFocus={() => setShowDropdown(true)}
+                disabled={loading}
+                className="w-full bg-white/10 border border-white/20 rounded-xl pl-10 pr-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+              />
+            </div>
+            
+            {showDropdown && searchPin && filteredStudents.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-white/20 rounded-xl max-h-40 overflow-y-auto">
+                {filteredStudents.slice(0, 5).map((student) => (
+                  <div
+                    key={student.id}
+                    onClick={() => handleStudentSelect(student)}
+                    className="px-4 py-2 hover:bg-white/10 cursor-pointer border-b border-white/10 last:border-b-0"
+                  >
+                    <div className="text-white font-medium">{student.name}</div>
+                    <div className="text-gray-400 text-sm">PIN: {student.pin} | ID: {student.student_id}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {selectedStudent && (
+              <div className="mt-2 p-3 bg-green-500/20 border border-green-500/30 rounded-xl">
+                <div className="text-green-300 font-medium">Selected: {selectedStudent.name}</div>
+                <div className="text-green-400 text-sm">PIN: {selectedStudent.pin} | Branch: {selectedStudent.branch}</div>
+              </div>
+            )}
           </div>
           
           <div>
@@ -169,7 +210,7 @@ const AddExtraFee = () => {
           whileHover={{ scale: loading ? 1 : 1.02 }}
           whileTap={{ scale: loading ? 1 : 0.98 }}
           type="submit"
-          disabled={loading}
+          disabled={loading || !formData.studentId}
           className="bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-8 rounded-xl font-semibold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? "Adding Extra Fee..." : "Add Extra Fee"}
